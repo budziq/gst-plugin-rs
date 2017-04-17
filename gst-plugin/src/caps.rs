@@ -13,7 +13,6 @@ use value::*;
 use miniobject::*;
 
 use glib;
-use gobject;
 use gst;
 
 #[derive(Eq)]

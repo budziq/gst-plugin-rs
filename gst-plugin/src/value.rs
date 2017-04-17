@@ -6,10 +6,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::ffi::{CString, CStr};
+use std::ffi::CStr;
 use std::mem;
 use std::marker::PhantomData;
-use std::ops::Deref;
 use std::borrow::Cow;
 use std::fmt;
 use std::slice;
@@ -185,7 +184,7 @@ impl<'a> ValueType<'a> for Option<Cow<'a, str>> {
 }
 
 impl<'a> ValueType<'a> for GstRc<Buffer> {
-    type Borrowed = GstRef<'a, Buffer>;
+    type Borrowed = GstRc<Buffer>;
 
     fn g_type() -> glib::GType {
         *TYPE_BUFFER
@@ -204,14 +203,14 @@ impl<'a> ValueType<'a> for GstRc<Buffer> {
         }
 
         unsafe {
-            let buffer = GstRefPtr::<Buffer>(gobject::g_value_get_boxed(&value.0) as *mut gst::GstBuffer);
-            Some(GstRef::new(buffer))
+            let buffer = gobject::g_value_get_boxed(&value.0) as *mut gst::GstBuffer;
+            Some(GstRc::new_from_unowned_ptr(buffer))
         }
     }
 
     fn from_value_ref(value_ref: &'a ValueRef<'a>) -> Option<Self::Borrowed> {
         if let ValueRef::Buffer(ref v) = *value_ref {
-            Some(unimplemented!())
+            Some(v.clone())
         } else {
             None
         }
@@ -402,7 +401,7 @@ impl Value {
                                                   .unwrap()))
             }
             typ if typ == *TYPE_BUFFER => {
-                unimplemented!()
+                ValueRef::Buffer(<GstRc<Buffer> as ValueType>::from_value(&self).unwrap())
             }
             _ => unreachable!(),
         }
@@ -778,6 +777,38 @@ mod tests {
 
         if let Some(value3) = TypedValue::<Cow<[Value]>>::from_value(value) {
             assert_eq!(value3.get(), orig_v.as_slice());
+        } else {
+            unreachable!();
+        }
+    }
+
+    #[test]
+    fn buffer() {
+        unsafe { gst::gst_init(ptr::null_mut(), ptr::null_mut()) };
+
+        let orig_v = Buffer::new_from_vec(vec![1, 2, 3, 4]).unwrap();
+
+        let value = Value::new(orig_v);
+        if let ValueRef::Buffer(buf) = value.get() {
+            assert_eq!(buf, orig_v);
+        } else {
+            unreachable!();
+        }
+
+        if let Some(buf) = value.get().try_get::<GstRc<Buffer>>() {
+            assert_eq!(buf, orig_v);
+        } else {
+            unreachable!();
+        }
+
+        let value2 = Value::new_from_value_ref(value.get());
+        assert_eq!(value2, value);
+
+        let value3 = TypedValue::new(orig_v);
+        assert_eq!(value3.get(), orig_v);
+
+        if let Some(value3) = TypedValue::<GstRc<Buffer>>::from_value(value) {
+            assert_eq!(value3.get(), orig_v);
         } else {
             unreachable!();
         }
