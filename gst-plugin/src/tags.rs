@@ -34,16 +34,16 @@ macro_rules! impl_tag(
     };
 );
 
-impl_tag!(Title, Option<Cow<'a, str>>, "title");
-impl_tag!(Album, Option<Cow<'a, str>>, "album");
-impl_tag!(Artist, Option<Cow<'a, str>>, "artist");
-impl_tag!(Encoder, Option<Cow<'a, str>>, "encoder");
-impl_tag!(AudioCodec, Option<Cow<'a, str>>, "audio-codec");
-impl_tag!(VideoCodec, Option<Cow<'a, str>>, "video-codec");
-impl_tag!(SubtitleCodec, Option<Cow<'a, str>>, "subtitle-codec");
-impl_tag!(ContainerFormat, Option<Cow<'a, str>>, "container-format");
+impl_tag!(Title, Cow<'a, str>, "title");
+impl_tag!(Album, Cow<'a, str>, "album");
+impl_tag!(Artist, Cow<'a, str>, "artist");
+impl_tag!(Encoder, Cow<'a, str>, "encoder");
+impl_tag!(AudioCodec, Cow<'a, str>, "audio-codec");
+impl_tag!(VideoCodec, Cow<'a, str>, "video-codec");
+impl_tag!(SubtitleCodec, Cow<'a, str>, "subtitle-codec");
+impl_tag!(ContainerFormat, Cow<'a, str>, "container-format");
 // TODO: Should ideally enforce this to be ISO-639
-impl_tag!(LanguageCode, Option<Cow<'a, str>>, "language-code");
+impl_tag!(LanguageCode, Cow<'a, str>, "language-code");
 impl_tag!(Duration, u64, "duration");
 impl_tag!(NominalBitrate, u32, "nominal-bitrate");
 

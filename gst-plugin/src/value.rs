@@ -34,7 +34,7 @@ pub enum ValueRef<'a> {
     UInt(u32),
     Int64(i64),
     UInt64(u64),
-    String(Option<Cow<'a, str>>),
+    String(Cow<'a, str>),
     Fraction(Rational32),
     Buffer(GstRc<Buffer>),
     Array(Cow<'a, [Value]>),
@@ -137,8 +137,8 @@ impl_value_ref_type_simple!(Rational32,
                                 gst::gst_value_set_fraction(&mut value.0, *v.numer(), *v.denom())
                             });
 
-impl<'a> ValueType<'a> for Option<Cow<'a, str>> {
-    type Borrowed = Option<&'a str>;
+impl<'a> ValueType<'a> for Cow<'a, str> {
+    type Borrowed = &'a str;
 
     fn g_type() -> glib::GType {
         gobject::G_TYPE_STRING
@@ -148,13 +148,8 @@ impl<'a> ValueType<'a> for Option<Cow<'a, str>> {
         unsafe {
             gobject::g_value_init(&mut value.0, Self::g_type());
 
-            match self {
-                None => gobject::g_value_set_string(&mut value.0, ptr::null()),
-                Some(ref s) => {
-                    let v_cstr = glib::g_strndup(s.as_ptr() as *const c_char, s.len());
-                    gobject::g_value_take_string(&mut value.0, v_cstr);
-                }
-            }
+            let v_cstr = glib::g_strndup(self.as_ptr() as *const c_char, self.len());
+            gobject::g_value_take_string(&mut value.0, v_cstr);
         }
     }
 
@@ -166,17 +161,17 @@ impl<'a> ValueType<'a> for Option<Cow<'a, str>> {
         unsafe {
             let s = gobject::g_value_get_string(&value.0);
             if s.is_null() {
-                return Some(None);
+                return Some(&"");
             }
 
             let cstr = CStr::from_ptr(s).to_str().expect("Invalid string");
-            Some(Some(cstr))
+            Some(cstr)
         }
     }
 
     fn from_value_ref(value_ref: &'a ValueRef<'a>) -> Option<Self::Borrowed> {
         if let ValueRef::String(ref v) = *value_ref {
-            Some(v.as_ref().map(|v| v.as_ref()))
+            Some(v.as_ref())
         } else {
             None
         }
@@ -392,9 +387,9 @@ impl Value {
                 ValueRef::Fraction(Rational32::from_value(&self).unwrap())
             }
             gobject::G_TYPE_STRING => {
-                ValueRef::String(<Option<Cow<str>> as ValueType>::from_value(&self)
+                ValueRef::String(Cow::Borrowed(<Cow<str> as ValueType>::from_value(&self)
                                      .unwrap()
-                                     .map(|v| Cow::Borrowed(v)))
+                                     ))
             }
             typ if typ == *TYPE_GST_VALUE_ARRAY => {
                 ValueRef::Array(Cow::Borrowed(<Cow<[Value]> as ValueType>::from_value(&self)
@@ -454,37 +449,37 @@ impl<'a, T: ValueType<'a>> From<T> for Value {
 
 impl From<String> for Value {
     fn from(v: String) -> Value {
-        From::from(Some(Cow::Owned(v)))
+        Value::from(Cow::Owned::<str>(v))
     }
 }
 
 impl<'a> From<&'a str> for Value {
     fn from(v: &'a str) -> Value {
-        From::from(Some(Cow::Borrowed(v)))
+        Value::from(Cow::Borrowed::<str>(v))
     }
 }
 
 impl From<Vec<Value>> for Value {
     fn from(v: Vec<Value>) -> Value {
-        From::from(Cow::Owned(v))
+        Value::from(Cow::Owned::<[Value]>(v))
     }
 }
 
 impl<'a> From<&'a Vec<Value>> for Value {
     fn from(v: &'a Vec<Value>) -> Value {
-        From::from(Cow::Borrowed(v.as_ref()))
+        Value::from(Cow::Borrowed::<[Value]>(v.as_ref()))
     }
 }
 
 impl<'a> From<&'a [Value]> for Value {
     fn from(v: &'a [Value]) -> Value {
-        From::from(Cow::Borrowed(v))
+        Value::from(Cow::Borrowed::<[Value]>(v))
     }
 }
 
 impl From<(i32, i32)> for Value {
     fn from((f_n, f_d): (i32, i32)) -> Value {
-        From::from(Rational32::new(f_n, f_d))
+        Value::from(Rational32::new(f_n, f_d))
     }
 }
 
@@ -551,13 +546,13 @@ impl<'a, T> From<T> for TypedValue<T>
     }
 }
 
-impl<'a> From<&'a str> for TypedValue<Option<Cow<'a, str>>> {
+impl<'a> From<&'a str> for TypedValue<Cow<'a, str>> {
     fn from(v: &'a str) -> Self {
         TypedValue::from_value(Value::new(v)).unwrap()
     }
 }
 
-impl<'a> From<String> for TypedValue<Option<Cow<'a, str>>> {
+impl<'a> From<String> for TypedValue<Cow<'a, str>> {
     fn from(v: String) -> Self {
         TypedValue::from_value(Value::new(v)).unwrap()
     }
@@ -640,20 +635,20 @@ mod tests {
         let orig_v = String::from("foo");
 
         let value = Value::new(orig_v.clone());
-        if let ValueRef::String(Some(v)) = value.get() {
+        if let ValueRef::String(v) = value.get() {
             assert_eq!(v, orig_v);
         } else {
             unreachable!();
         }
 
-        if let Some(Some(v)) = value.get().try_get::<Option<Cow<str>>>() {
+        if let Some(v) = value.get().try_get::<Cow<str>>() {
             assert_eq!(v, orig_v);
         } else {
             unreachable!();
         }
 
         let value2 = value.clone();
-        if let ValueRef::String(Some(v)) = value2.get() {
+        if let ValueRef::String(v) = value2.get() {
             assert_eq!(v, orig_v);
         } else {
             unreachable!();
@@ -667,10 +662,10 @@ mod tests {
         assert_eq!(value2, value);
 
         let value3 = TypedValue::new(orig_v.clone());
-        assert_eq!(value3.get(), Some(orig_v.as_str()));
+        assert_eq!(value3.get(),orig_v.as_str());
 
-        if let Some(value3) = TypedValue::<Option<Cow<str>>>::from_value(value) {
-            assert_eq!(value3.get(), Some(orig_v.as_str()));
+        if let Some(value3) = TypedValue::<Cow<str>>::from_value(value) {
+            assert_eq!(value3.get(), orig_v.as_str());
         } else {
             unreachable!();
         }
@@ -683,20 +678,20 @@ mod tests {
         let orig_v = "foo";
 
         let value = Value::new(orig_v);
-        if let ValueRef::String(Some(v)) = value.get() {
+        if let ValueRef::String(v) = value.get() {
             assert_eq!(v, orig_v);
         } else {
             unreachable!();
         }
 
-        if let Some(Some(v)) = value.get().try_get::<Option<Cow<str>>>() {
+        if let Some(v) = value.get().try_get::<Cow<str>>() {
             assert_eq!(v, orig_v);
         } else {
             unreachable!();
         }
 
         let value2 = value.clone();
-        if let ValueRef::String(Some(v)) = value2.get() {
+        if let ValueRef::String(v) = value2.get() {
             assert_eq!(v, orig_v);
         } else {
             unreachable!();
@@ -706,10 +701,10 @@ mod tests {
         assert_eq!(value2, value);
 
         let value3 = TypedValue::new(orig_v);
-        assert_eq!(value3.get(), Some(orig_v));
+        assert_eq!(value3.get(), orig_v);
 
-        if let Some(value3) = TypedValue::<Option<Cow<str>>>::from_value(value) {
-            assert_eq!(value3.get(), Some(orig_v));
+        if let Some(value3) = TypedValue::<Cow<str>>::from_value(value) {
+            assert_eq!(value3.get(), orig_v);
         } else {
             unreachable!();
         }
